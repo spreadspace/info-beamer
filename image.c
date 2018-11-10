@@ -75,6 +75,85 @@ static int image_draw(lua_State *L) {
     return 0;
 }
 
+typedef struct {
+    float x, y;
+} vertex2_t;
+
+typedef struct {
+    float x, y, z, w;
+} vertex4_t;
+
+static vertex2_t getvert2(lua_State *L, int idx, int i)
+{
+    vertex2_t ret;
+    i *= 2;
+    ++i;
+    lua_rawgeti(L, idx, i  );
+    lua_rawgeti(L, idx, i+1);
+    ret.x = lua_tonumber(L, -2);
+    ret.y = lua_tonumber(L, -1);
+    lua_pop(L, 2);
+    return ret;
+}
+
+static vertex4_t getvert4(lua_State *L, int idx, int i)
+{
+    vertex4_t ret;
+    i *= 4;
+    ++i;
+    lua_rawgeti(L, idx, i  );
+    lua_rawgeti(L, idx, i+1);
+    lua_rawgeti(L, idx, i+2);
+    lua_rawgeti(L, idx, i+3);
+    ret.x = lua_tonumber(L, -4);
+    ret.y = lua_tonumber(L, -3);
+    ret.z = lua_tonumber(L, -2);
+    ret.w = lua_tonumber(L, -1);
+    lua_pop(L, 4);
+    return ret;
+}
+
+static int getdrawtype(lua_State *L, int idx)
+{
+    switch(*luaL_checkstring(L, idx)) {
+        case 'q': return GL_QUADS;
+        case 't': return GL_TRIANGLES;
+        case 'T': return GL_TRIANGLE_STRIP;
+        case 'p': return GL_POINTS;
+        case 'l': return GL_LINES;
+        case 'L': return GL_LINE_STRIP;
+        case 'f': return GL_TRIANGLE_FAN;
+        case 'Q': return GL_QUAD_STRIP;
+        case 'P': return GL_POLYGON;
+    }
+    luaL_error(L, "one of qtTplLfQp expected");
+    return 0; /* not reached */
+}
+
+/* image:drawverts(mode, vertlist, texcoordlist, alpha = 1.0) */
+static int image_drawverts(lua_State *L) {
+    image_t *image = checked_image(L, 1);
+    int mode = getdrawtype(L, 2);
+    luaL_checktype(L, 3, LUA_TTABLE);
+    luaL_checktype(L, 4, LUA_TTABLE);
+    GLfloat alpha = luaL_optnumber(L, 5, 1.0);
+    int n = lua_objlen(L, 3) / 4;
+
+    glBindTexture(GL_TEXTURE_2D, image->tex);
+    shader_set_gl_color(1.0, 1.0, 1.0, alpha);
+
+    glBegin(mode);
+    for(int i = 0; i < n; ++i) {
+        vertex4_t vert = getvert4(L, 3, i);
+        vertex2_t uv = getvert2(L, 4, i);
+        glTexCoord2f(uv.x, uv.y);
+        glVertex4f(vert.x, vert.y, vert.z, vert.w);
+    }
+    glEnd();
+
+    return 0;
+}
+
 static int image_texid(lua_State *L) {
     image_t *image = checked_image(L, 1);
     lua_pushnumber(L, image->tex);
@@ -88,6 +167,7 @@ static int image_dispose(lua_State *L) {
 static const luaL_reg image_methods[] = {
     {"state",   image_state},
     {"draw",    image_draw},
+    {"drawverts",image_drawverts},
     {"size",    image_size},
     {"texid",   image_texid},
     {"dispose", image_dispose},
